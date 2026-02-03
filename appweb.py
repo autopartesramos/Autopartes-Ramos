@@ -15,32 +15,20 @@ st.markdown("""
 body {
     background-color: #f5f5f5;
 }
-
 input {
     background-color: #ffffff !important;
     color: #000000 !important;
 }
-
 input::placeholder {
     color: #777777 !important;
 }
-
 h1, h2, h3 {
     color: #b30000;
 }
-
 .precio-venta {
     font-size: 22px;
     font-weight: bold;
     color: #b30000;
-}
-
-.card {
-    background-color: #ffffff;
-    padding: 12px;
-    border-radius: 10px;
-    box-shadow: 0 0 6px rgba(0,0,0,0.1);
-    margin-bottom: 15px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -77,14 +65,10 @@ for archivo in os.listdir(carpeta):
         df.columns = df.columns.str.lower()
         df["proveedor"] = archivo.rsplit(".", 1)[0]
 
-        if "descripcion" not in df.columns:
-            df["descripcion"] = ""
-        if "codigo" not in df.columns:
-            df["codigo"] = ""
-        if "costo" not in df.columns:
-            df["costo"] = 0
-        if "venta" not in df.columns:
-            df["venta"] = 0
+        df["descripcion"] = df.get("descripcion", "")
+        df["codigo"] = df.get("codigo", "")
+        df["costo"] = df.get("costo", 0)
+        df["venta"] = df.get("venta", 0)
 
         df["desc_norm"] = df["descripcion"].apply(normalizar)
         df["cod_norm"] = df["codigo"].apply(normalizar)
@@ -96,17 +80,25 @@ catalogo = pd.concat(dataframes, ignore_index=True)
 # ---------------- BUSCADOR ----------------
 busqueda = st.text_input(
     "🔍 Buscar por descripción o código",
-    placeholder="Ej: DUNA | B.F.DC | 51443 | BOMBA FRENO"
+    placeholder="Ej: b.f. sandero | freno logan | 51443"
 )
 
 # ---------------- RESULTADOS ----------------
 if busqueda:
-    q = normalizar(busqueda)
+    # 🔹 separar palabras ANTES de normalizar
+    palabras = re.split(r'\s+', busqueda.lower())
 
-    resultado = catalogo[
-        catalogo["desc_norm"].str.contains(q, na=False) |
-        catalogo["cod_norm"].str.contains(q, na=False)
-    ]
+    palabras_norm = [normalizar(p) for p in palabras if p.strip()]
+
+    mask = pd.Series(True, index=catalogo.index)
+
+    for p in palabras_norm:
+        mask = mask & (
+            catalogo["desc_norm"].str.contains(p, na=False) |
+            catalogo["cod_norm"].str.contains(p, na=False)
+        )
+
+    resultado = catalogo[mask]
 
     if resultado.empty:
         st.warning("No se encontraron resultados")
@@ -126,53 +118,18 @@ if busqueda:
 
         st.dataframe(mostrar, use_container_width=True, hide_index=True)
 
-        st.subheader("📦 Resultados con imagen")
-
-        carpeta_img = "imagenes"
-
-        for _, fila in mostrar.iterrows():
-            ruta_img = None
-            if os.path.exists(carpeta_img):
-                for ext in ["jpg", "png", "jpeg", "webp"]:
-                    posible = os.path.join(carpeta_img, f"{fila['codigo']}.{ext}")
-                    if os.path.exists(posible):
-                        ruta_img = posible
-                        break
-
-            col_img, col_txt = st.columns([1, 3])
-
-            with col_img:
-                if ruta_img:
-                    st.image(ruta_img, use_container_width=True)
-                else:
-                    st.caption("Sin imagen")
-
-            with col_txt:
-                st.markdown(
-                    f"""
-                    <div class="card">
-                    <b>Proveedor:</b> {fila['proveedor']}<br>
-                    <b>Código:</b> {fila['codigo']}<br>
-                    <b>Descripción:</b> {fila['descripcion']}<br>
-                    <b>Venta:</b> <span class="precio-venta">${fila['venta']:,}</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        # ---------------- MEJOR OPCION ----------------
         mejor = mostrar.iloc[0]
 
+        # ---------------- IMAGEN ----------------
         ruta_img = None
+        carpeta_img = "imagenes"
+
         if os.path.exists(carpeta_img):
             for ext in ["jpg", "png", "jpeg", "webp"]:
                 posible = os.path.join(carpeta_img, f"{mejor['codigo']}.{ext}")
                 if os.path.exists(posible):
                     ruta_img = posible
                     break
-
-        st.divider()
-        st.subheader("🏆 Mejor opción")
 
         col_img, col_info = st.columns([1, 2])
 
@@ -185,6 +142,7 @@ if busqueda:
         with col_info:
             st.markdown(
                 f"""
+                ### 💰 Mejor opción
                 **Proveedor:** {mejor['proveedor']}  
                 **Descripción:** {mejor['descripcion']}  
                 **Código:** {mejor['codigo']}  
